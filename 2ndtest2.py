@@ -20,7 +20,8 @@ Freq = 100000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 base_duty = 70
 
 dst_max = 300
-dst_
+dst_level = 0
+dst_ratio = {0,0.2,0.4,0.6,0.8,1}
 
 pi = pigpio.pi()
 pi.set_mode(gpio_pinR, pigpio.OUTPUT)
@@ -39,15 +40,11 @@ def terminate():
         pi.write(gpio_pinL, 0)
         pi.write(DIRpin, 0)
         pi.write(SWpin, 0)
-
-        pi.write()
     except Exception:
         pass
     finally:
         print("Terminated!")
         pi.stop()
-
-
 
 def dutyToPer(duty):
     return int(duty * 1000000 / 100.)
@@ -72,17 +69,17 @@ class Motor(threading.Thread):
                 #print("Motor On")
                 pi.write(SWpin,1)
                 if self.ang > 0: #左寄り
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer((base_duty*self.speed)+self.delta))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer((base_duty*1.1*self.speed)-self.delta))
+                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer(((base_duty*self.speed)+self.delta)*dst_ratio[dst_level]))
+                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer(((base_duty*1.1*self.speed)-self.delta)*dst_ratio[dst_level]))
                     print("Lside")
                 elif self.ang < 0: #右寄り
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer((base_duty*self.speed)+self.delta))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer((base_duty*1.1*self.speed)-self.delta))
+                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer(((base_duty*self.speed)+self.delta)*dst_ratio[dst_level]))
+                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer(((base_duty*1.1*self.speed)-self.delta)*dst_ratio[dst_level]))
                     print("Rside")
                     
                 else:    
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer(base_duty*self.speed))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer(base_duty*1.1*self.speed))
+                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer((base_duty*self.speed)*dst_ratio[dst_level]))
+                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer((base_duty*1.1*self.speed)*dst_ratio[dst_level]))
             # print(self.delta)
             time.sleep(0.1)
 
