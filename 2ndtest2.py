@@ -20,7 +20,7 @@ Freq = 100000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 base_duty = 70
 
 dst_max = 300
-dst_
+dst_ratio = [0,0.2,0.4,0.6,0.8,1]
 
 pi = pigpio.pi()
 pi.set_mode(gpio_pinR, pigpio.OUTPUT)
@@ -39,58 +39,21 @@ def terminate():
         pi.write(gpio_pinL, 0)
         pi.write(DIRpin, 0)
         pi.write(SWpin, 0)
-
-        pi.write()
     except Exception:
         pass
     finally:
         print("Terminated!")
         pi.stop()
 
-
-
 def dutyToPer(duty):
     return int(duty * 1000000 / 100.)
-
-class Motor(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self.setDaemon(True)
-        self.speed = 0
-        self.ang = 0
-        self.delta = 0
-        self.kill = False
-
-    def run(self):
-        while not self.kill:
-            # print(self.ang)
-            # print(self.speed)
-            if self.speed <= 0:
-                #print("Speed Low")
-                pi.write(SWpin,0)
-            else:
-                #print("Motor On")
-                pi.write(SWpin,1)
-                if self.ang > 0: #左寄り
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer((base_duty*self.speed)+self.delta))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer((base_duty*1.1*self.speed)-self.delta))
-                    print("Lside")
-                elif self.ang < 0: #右寄り
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer((base_duty*self.speed)+self.delta))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer((base_duty*1.1*self.speed)-self.delta))
-                    print("Rside")
-                    
-                else:    
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer(base_duty*self.speed))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer(base_duty*1.1*self.speed))
-            # print(self.delta)
-            time.sleep(0.1)
 
 class Ultrasonic(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         self.setDaemon(True)
         self.kill = False
+        self.dst_level = 0
 
     def read_distance():
         pi.write(TRIGpin, 1)
@@ -110,7 +73,44 @@ class Ultrasonic(threading.Thread):
         while not self.kill:
             dst = self.read_distance()
             if dst < dst_max:
-                dst_level = round(dst/50)
+                self.dst_level = round(dst/50)
+
+    def get_level(self):
+        return self.dst_level
+
+class Motor(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.setDaemon(True)
+        self.kill = False
+        self.speed = 0
+        self.ang = 0
+        self.delta = 0
+
+    def run(self):
+        while not self.kill:
+            # print(self.ang)
+            # print(self.speed)
+            if self.speed <= 0:
+                #print("Speed Low")
+                pi.write(SWpin,0)
+            else:
+                #print("Motor On")
+                pi.write(SWpin,1)
+                if self.ang > 0: #左寄り
+                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer(((base_duty*self.speed)+self.delta)*dst_ratio[us.get_level()]))
+                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer(((base_duty*1.1*self.speed)-self.delta)*dst_ratio[us.get_level()]))
+                    print("Lside")
+                elif self.ang < 0: #右寄り
+                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer(((base_duty*self.speed)+self.delta)*dst_ratio[us.get_level()]))
+                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer(((base_duty*1.1*self.speed)-self.delta)*dst_ratio[us.get_level()]))
+                    print("Rside")
+                    
+                else:    
+                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer((base_duty*self.speed)*dst_ratio[us.get_level()]))
+                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer((base_duty*1.1*self.speed)*dst_ratio[us.get_level()]))
+            # print(self.delta)
+            time.sleep(0.1)
 
 class Autoware:
     def __init__(self):
@@ -167,6 +167,8 @@ class Joystick:
 
 if __name__ == '__main__':
     print("In The Main Function!")
+    us = Ultrasonic()
+    us.start()
     m = Motor()
     m.start()
     joy_flag = False
