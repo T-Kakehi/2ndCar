@@ -58,6 +58,9 @@ def culc_power(v, omg):
     mat = np.matrix([[v],[omg]])
     return inverse_mat.dot(mat)
 
+def sigmoid_func(raw):
+    return 1/(1+np.e**-raw)
+
 class Ultrasonic(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -170,7 +173,9 @@ class Joystick:
         self.cross = raw.buttons[2]
         self.speed = raw.axes[3]
         self.ang = raw.axes[0]
-        self.delta = math.asin(self.ang)-math.atan(self.ang)
+        power = culc_power(self.speed, self.ang)
+        self.Rpower = sigmoid_func(power[0][0])
+        self.Lpower = sigmoid_func(power[1][0])
 
     def get_button(self):
         return self.select_button, self.ciurcle, self.cross
