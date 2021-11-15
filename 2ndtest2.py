@@ -54,8 +54,8 @@ def duty2per(duty):
     return int(duty * 1000000 / 100.)
 
 def culc_power(v, omg):
-    inverse_mat = np.matrix([[1/2,1/2],[1/T,-1/T]]) ** -1
-    mat = np.matrix([[v],[omg]])
+    inverse_mat = np.linalg.pinv(np.array([[1/2,1/2],[1/T,-1/T]]))
+    mat = np.array([[v],[omg]])
     return inverse_mat.dot(mat)
 
 def sigmoid_func(raw):
@@ -68,7 +68,7 @@ class Ultrasonic(threading.Thread):
         self.kill = False
         self.dst_level = 0
 
-    def read_distance():
+    def read_distance(self):
         pi.write(TRIGpin, 1)
         time.sleep(0.00001)
         pi.write(TRIGpin, 0)
@@ -124,6 +124,8 @@ class Motor(threading.Thread):
                     pi.hardware_PWM(gpio_pinR, Freq, duty2per(base_duty*Rmotor_ini*self.speed*dst_ratio[us.get_level()]))
                     pi.hardware_PWM(gpio_pinL, Freq, duty2per(base_duty*Lmotor_ini*self.speed*dst_ratio[us.get_level()]))
             # print(self.delta)
+                print(self.Rpower)
+                print(self.Lpower)
             time.sleep(0.1)
 
 class Autoware:
