@@ -68,7 +68,7 @@ class Ultrasonic(threading.Thread):
         threading.Thread.__init__(self)
         self.setDaemon(True)
         self.kill = False
-        self.dst_level = 0
+        self.dst_level = 3
 
     def read_distance(self):
         pi.write(TRIGpin, 1)
