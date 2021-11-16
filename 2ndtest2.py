@@ -25,7 +25,7 @@ Freq = 100000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 base_duty = 70
 
 history = collections.deque(maxlen=10)
-dst_min = 5
+dst_min = 10
 dst_max = 300
 dst_ratio = [0,0.2,0.4,0.6,0.8,1]
 
@@ -91,8 +91,10 @@ class Ultrasonic(threading.Thread):
     def run(self):
         while not self.kill:
             dst = self.distance_filtered()
-            print("---dst---")
-            print(dst)
+            if dst_min < dst < dst_max:
+                print("---dst---")
+                print(dst)
+                self.dst_level = round(dst/60)
             time.sleep(0.2)
 
     def get_level(self):
