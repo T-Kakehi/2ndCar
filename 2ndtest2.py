@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import threading
 import time
-import math
+import collections
 import numpy as np
 import rospy
 import pigpio
@@ -24,6 +24,8 @@ T = 0.475 # 車輪幅0.475[m]
 Freq = 100000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 base_duty = 70
 
+history = collections.deque(maxlen=10)
+dst_min = 5
 dst_max = 300
 dst_ratio = [0,0.2,0.4,0.6,0.8,1]
 
@@ -72,21 +74,26 @@ class Ultrasonic(threading.Thread):
         pi.write(TRIGpin, 1)
         time.sleep(0.00001)
         pi.write(TRIGpin, 0)
-
+        StartTime = time.time()
+        StopTime = time.time()
         while pi.read(ECHOpin) == 0:
-            sig_off = time.time()
+            StartTime = time.time()
         while pi.read(ECHOpin) == 1:
-            sig_on = time.time()
-
-        duration = sig_off - sig_on
-        distance = duration * 34000 / 2.0
+            StopTime = time.time()
+        TimeElapsed = StopTime - StartTime
+        distance = (TimeElapsed * 34300) / 2
         return distance
+
+    def distance_filtered(self):
+        history.append(self.read_distance())
+        return np.median(history)
 
     def run(self):
         while not self.kill:
-            dst = self.read_distance()
-            if dst < dst_max:
-                self.dst_level = round(dst/50)
+            dst = self.distance_filtered()
+            print("---dst---")
+            print(dst)
+            time.sleep(0.2)
 
     def get_level(self):
         return self.dst_level
