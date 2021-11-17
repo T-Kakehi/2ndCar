@@ -92,8 +92,8 @@ class Ultrasonic(threading.Thread):
         while not self.kill:
             dst = self.distance_filtered()
             if dst_min < dst:
-                print("---dst---")
-                print(dst)
+                # print("---dst---")
+                # print(dst)
                 self.dst_level = int(dst/5)
             elif dst > dst_max:
                 self.dst_level = len(dst_ratio)
@@ -138,8 +138,8 @@ class Motor(threading.Thread):
                 elif self.Lduty < 0:
                     self.Rduty = self.Rduty + (abs(self.Lduty))
                     self.Lduty = 0
-                print(self.Rpower)
-                print(self.Lpower)
+                # print(self.Rpower)
+                # print(self.Lpower)
                 pi.hardware_PWM(gpio_pinR, Freq, duty2per(self.Rduty))
                 pi.hardware_PWM(gpio_pinL, Freq, duty2per(self.Lduty))
             time.sleep(0.1)
