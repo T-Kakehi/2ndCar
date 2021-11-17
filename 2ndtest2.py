@@ -17,17 +17,17 @@ SWpin = 15
 TRIGpin = 22
 ECHOpin = 23
 
-Rmotor_ini = 0.95
+Rmotor_ini = 1
 Lmotor_ini = 1
 T = 0.475 # 車輪幅0.475[m]
 
 Freq = 100000  # Hzを上げると音が聞きづらくなるが、熱を持つ
-base_duty = 70
+base_duty = 90
 
 history = collections.deque(maxlen=10)
-dst_min = 10
-dst_max = 300
-dst_ratio = [0,0.2,0.4,0.6,0.8,1]
+dst_min = 2
+dst_max = 60
+dst_ratio = [0,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
 
 pi = pigpio.pi()
 pi.set_mode(gpio_pinR, pigpio.OUTPUT)
@@ -53,12 +53,12 @@ def terminate():
         pi.stop()
 
 def duty2per(duty):
-    return int(duty * 1000000 / 100.)
+    return int(duty * 1000000 / 100.) # duty 0~1M
 
 def culc_power(v, omg):
-    inverse_mat = np.linalg.pinv(np.array([[1/2,1/2],[1/T,-1/T]]))
-    mat = np.array([[v],[omg]])
-    return inverse_mat.dot(mat)
+    a = np.array([[1/2,1/2],[1/T,-1/T]])
+    b = np.array([[v],[omg]])
+    return np.linalg.solve(a,b)
 
 def sigmoid_func(raw):
     return 1/(1+np.e**-raw)
@@ -68,7 +68,7 @@ class Ultrasonic(threading.Thread):
         threading.Thread.__init__(self)
         self.setDaemon(True)
         self.kill = False
-        self.dst_level = 3
+        self.dst_level = 0
 
     def read_distance(self):
         pi.write(TRIGpin, 1)
@@ -91,10 +91,12 @@ class Ultrasonic(threading.Thread):
     def run(self):
         while not self.kill:
             dst = self.distance_filtered()
-            if dst_min < dst < dst_max:
+            if dst_min < dst:
                 print("---dst---")
                 print(dst)
-                self.dst_level = round(dst/60)
+                self.dst_level = int(dst/5)
+            elif dst > dst_max:
+                self.dst_level = len(dst_ratio)
             time.sleep(0.2)
 
     def get_level(self):
@@ -109,6 +111,8 @@ class Motor(threading.Thread):
         self.ang = 0
         self.Rpower = 0
         self.Lpower = 0
+        self.Rduty = 0
+        self.Lduty = 0
 
     def run(self):
         while not self.kill:
@@ -120,21 +124,24 @@ class Motor(threading.Thread):
             else:
                 #print("Motor On")
                 pi.write(SWpin,1)
-                if self.ang > 0: #左寄り
-                    pi.hardware_PWM(gpio_pinR, Freq, duty2per(base_duty*Rmotor_ini*self.Rpower*dst_ratio[us.get_level()]))
-                    pi.hardware_PWM(gpio_pinL, Freq, duty2per(base_duty*Lmotor_ini*self.Lpower*dst_ratio[us.get_level()]))
-                    print("Lside")
-                elif self.ang < 0: #右寄り
-                    pi.hardware_PWM(gpio_pinR, Freq, duty2per(base_duty*Rmotor_ini*self.Rpower*dst_ratio[us.get_level()]))
-                    pi.hardware_PWM(gpio_pinL, Freq, duty2per(base_duty*Lmotor_ini*self.Lpower*dst_ratio[us.get_level()]))
-                    print("Rside")
-                    
-                else:    
-                    pi.hardware_PWM(gpio_pinR, Freq, duty2per(base_duty*Rmotor_ini*self.speed*dst_ratio[us.get_level()]))
-                    pi.hardware_PWM(gpio_pinL, Freq, duty2per(base_duty*Lmotor_ini*self.speed*dst_ratio[us.get_level()]))
-            # print(self.delta)
+                self.Rduty = base_duty*Rmotor_ini*self.Rpower*dst_ratio[us.get_level()]
+                self.Lduty = base_duty*Lmotor_ini*self.Lpower*dst_ratio[us.get_level()]
+                if self.Rduty > 100:
+                    self.Lduty = self.Lduty - (self.Rduty - 100)
+                    self.Rduty = 100
+                elif self.Rduty < 0:
+                    self.Lduty = self.Lduty + (abs(self.Rduty))
+                    self.Rduty = 0
+                if self.Lduty > 100:
+                    self.Rduty = self.Rduty - (self.Lduty - 100)
+                    self.Lduty = 100
+                elif self.Lduty < 0:
+                    self.Rduty = self.Rduty + (abs(self.Lduty))
+                    self.Lduty = 0
                 print(self.Rpower)
                 print(self.Lpower)
+                pi.hardware_PWM(gpio_pinR, Freq, duty2per(self.Rduty))
+                pi.hardware_PWM(gpio_pinL, Freq, duty2per(self.Lduty))
             time.sleep(0.1)
 
 class Autoware:
@@ -185,8 +192,8 @@ class Joystick:
         self.speed = raw.axes[3]
         self.ang = raw.axes[0]
         power = culc_power(self.speed, self.ang)
-        self.Rpower = sigmoid_func(power[0][0])
-        self.Lpower = sigmoid_func(power[1][0])
+        self.Rpower = power[0][0]
+        self.Lpower = power[1][0]
 
     def get_button(self):
         return self.select_button, self.ciurcle, self.cross
