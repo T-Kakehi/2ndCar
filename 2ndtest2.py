@@ -88,7 +88,7 @@ class Ultrasonic(threading.Thread):
         StopTime = time.time()
         while pi.read(ECHOpin) == 0:
             StartTime = time.time()
-        while pi.read(ECHOpin) == 1 and (time.time() - StartTime) < max_sec:
+        while pi.read(ECHOpin) == 1 and (time.time() - StartTime) <= max_sec:
             StopTime = time.time()
         TimeElapsed = StopTime - StartTime
         distance = (TimeElapsed * sonic_speed) / 2
