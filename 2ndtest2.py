@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 import threading
 import time
-import math
+import collections
+import numpy as np
 import rospy
 import pigpio
 from geometry_msgs.msg import TwistStamped
@@ -16,11 +17,17 @@ SWpin = 15
 TRIGpin = 22
 ECHOpin = 23
 
-Freq = 100000  # Hzを上げると音が聞きづらくなるが、熱を持つ
-base_duty = 70
+Rmotor_ini = 1
+Lmotor_ini = 1
+T = 0.475 # 車輪幅0.475[m]
 
-dst_max = 300
-dst_ratio = [0,0.2,0.4,0.6,0.8,1]
+Freq = 100000  # Hzを上げると音が聞きづらくなるが、熱を持つ
+base_duty = 100
+
+history = collections.deque(maxlen=10)
+dst_min = 2
+dst_max = 60
+dst_ratio = [0,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
 
 pi = pigpio.pi()
 pi.set_mode(gpio_pinR, pigpio.OUTPUT)
@@ -45,8 +52,24 @@ def terminate():
         print("Terminated!")
         pi.stop()
 
-def dutyToPer(duty):
-    return int(duty * 1000000 / 100.)
+def duty2per(duty):
+    return int(duty * 1000000 / 100.) # duty 0~1M
+
+def culc_power(v, omg):
+    # a = np.array([[1/2,1/2],[1/T,-1/T]])
+    # b = np.array([[v],[omg]])
+    # return np.linalg.solve(a,b)
+    a = np.array([[0.5,0.5],[1/T,-1/T]])
+    # print(a)
+    inverse = np.linalg.pinv(a)
+    # print(inverse)
+    b = np.array([[v],[omg]])
+    v = inverse.dot(b)
+    # print(v)
+    return v
+
+def sigmoid_func(raw):
+    return 1/(1+np.e**-raw)
 
 class Ultrasonic(threading.Thread):
     def __init__(self):
@@ -55,25 +78,34 @@ class Ultrasonic(threading.Thread):
         self.kill = False
         self.dst_level = 0
 
-    def read_distance():
+    def read_distance(self):
         pi.write(TRIGpin, 1)
         time.sleep(0.00001)
         pi.write(TRIGpin, 0)
-
+        StartTime = time.time()
+        StopTime = time.time()
         while pi.read(ECHOpin) == 0:
-            sig_off = time.time()
+            StartTime = time.time()
         while pi.read(ECHOpin) == 1:
-            sig_on = time.time()
-
-        duration = sig_off - sig_on
-        distance = duration * 34000 / 2.0
+            StopTime = time.time()
+        TimeElapsed = StopTime - StartTime
+        distance = (TimeElapsed * 34300) / 2
         return distance
+
+    def distance_filtered(self):
+        history.append(self.read_distance())
+        return np.median(history)
 
     def run(self):
         while not self.kill:
-            dst = self.read_distance()
-            if dst < dst_max:
-                self.dst_level = round(dst/50)
+            dst = self.distance_filtered()
+            if dst_min < dst < dst_max:
+                # print("---dst---")
+                # print(dst)
+                self.dst_level = int(dst/5)
+            elif dst_max < dst:
+                self.dst_level = len(dst_ratio) - 1
+            time.sleep(0.2)
 
     def get_level(self):
         return self.dst_level
@@ -85,31 +117,41 @@ class Motor(threading.Thread):
         self.kill = False
         self.speed = 0
         self.ang = 0
-        self.delta = 0
+        self.Rpower = 0
+        self.Lpower = 0
+        self.Rduty = 0
+        self.Lduty = 0
 
     def run(self):
         while not self.kill:
             # print(self.ang)
             # print(self.speed)
             if self.speed <= 0:
-                #print("Speed Low")
+                #print("Motor Stop")
                 pi.write(SWpin,0)
             else:
                 #print("Motor On")
                 pi.write(SWpin,1)
-                if self.ang > 0: #左寄り
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer(((base_duty*self.speed)+self.delta)*dst_ratio[us.get_level()]))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer(((base_duty*1.1*self.speed)-self.delta)*dst_ratio[us.get_level()]))
-                    print("Lside")
-                elif self.ang < 0: #右寄り
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer(((base_duty*self.speed)+self.delta)*dst_ratio[us.get_level()]))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer(((base_duty*1.1*self.speed)-self.delta)*dst_ratio[us.get_level()]))
-                    print("Rside")
-                    
-                else:    
-                    pi.hardware_PWM(gpio_pinR, Freq, dutyToPer((base_duty*self.speed)*dst_ratio[us.get_level()]))
-                    pi.hardware_PWM(gpio_pinL, Freq, dutyToPer((base_duty*1.1*self.speed)*dst_ratio[us.get_level()]))
-            # print(self.delta)
+                # print(self.Rpower)
+                # print(self.Lpower)
+                self.Rduty = base_duty*Rmotor_ini*self.Rpower#*dst_ratio[us.get_level()]
+                self.Lduty = base_duty*Lmotor_ini*self.Lpower#*dst_ratio[us.get_level()]
+                if self.Rduty > 100:
+                    self.Lduty = self.Lduty - (self.Rduty - 100)
+                    self.Rduty = 100
+                elif self.Rduty < 0:
+                    self.Lduty = self.Lduty + (abs(self.Rduty))
+                    self.Rduty = 0
+                if self.Lduty > 100:
+                    self.Rduty = self.Rduty - (self.Lduty - 100)
+                    self.Lduty = 100
+                elif self.Lduty < 0:
+                    self.Rduty = self.Rduty + (abs(self.Lduty))
+                    self.Lduty = 0
+                # print(self.Rduty)
+                # print(self.Lduty)
+                pi.hardware_PWM(gpio_pinR, Freq, duty2per(self.Rduty))
+                pi.hardware_PWM(gpio_pinL, Freq, duty2per(self.Lduty))
             time.sleep(0.1)
 
 class Autoware:
@@ -117,11 +159,11 @@ class Autoware:
         self.twist = {}
         self.speed = 0
         self.ang = 0
-        self.delta = 0
+        self.Rpower = 0
+        self.Lpower = 0
         rospy.init_node('Car')  # , log_level=rospy.DEBUG
         rospy.on_shutdown(self.__on_shutdown)
         self.subscriber = rospy.Subscriber('/twist_cmd', TwistStamped, self.__callback)
-        # self.subscriber = rospy.Subscriber('/cmd_vel', Twist, self.__callback)
 
     def __callback(self, raw):
         twist = {"speed": raw.twist.linear.x, "ang": raw.twist.angular.z}  # speed: m/s, angular: radian/s
@@ -131,14 +173,16 @@ class Autoware:
         rospy.logdebug("Autoware > %s" % self.twist)
         self.ang = twist["ang"]
         self.speed = twist["speed"]
-        self.delta = math.asin(self.ang)
+        power = culc_power(self.speed, self.ang)
+        self.Rpower = power[0][0]
+        self.Lpower = power[1][0]
 
     def __on_shutdown(self):
         rospy.loginfo("shutdown!")
         self.subscriber.unregister()
 
     def get_Twist(self):
-        return self.speed, self.ang, self.delta
+        return self.speed, self.ang, self.Rpower, self.Lpower
 
 class Joystick:
     def __init__(self):
@@ -147,7 +191,8 @@ class Joystick:
         self.cross = 0
         self.speed = 0
         self.ang = 0
-        self.delta = 0
+        self.Rpower = 0
+        self.Lpower = 0
         self.subscriber = rospy.Subscriber('/joy', Joy, self.__callback)
 
     def __callback(self, raw):
@@ -155,15 +200,18 @@ class Joystick:
         self.ciurcle = raw.buttons[3]
         self.cross = raw.buttons[2]
         self.speed = raw.axes[3]
-        self.ang = raw.axes[0]
-        self.delta = math.asin(self.ang)-math.atan(self.ang)
-        
+        self.ang = raw.axes[2]
+        # print(self.speed, self.ang)
+        power = culc_power(self.speed, self.ang)
+        # print(power)
+        self.Rpower = power[0][0]
+        self.Lpower = power[1][0]
 
     def get_button(self):
         return self.select_button, self.ciurcle, self.cross
     
     def get_Twist(self):
-        return self.speed, self.ang, self.delta
+        return self.speed, self.ang, self.Rpower, self.Lpower
 
 if __name__ == '__main__':
     print("In The Main Function!")
@@ -188,14 +236,17 @@ if __name__ == '__main__':
                 status = j.get_Twist()
                 m.speed = status[0]
                 m.ang = status[1]
-                m.delta = status[2]
+                m.Rpower = status[2]
+                m.Lpower = status[3]
             else:
                 status = a.get_Twist()
                 m.speed = status[0]
                 m.ang = status[1]
-                m.delta = status[2]
+                m.Rpower = status[2]
+                m.Lpower = status[3]
             rospy.sleep(0.01)
     except (rospy.ROSInterruptException, KeyboardInterrupt):
         pass
     m.kill = True
+    us.kill = True
     terminate()
