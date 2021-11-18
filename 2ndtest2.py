@@ -28,7 +28,7 @@ sonic_speed = 34300
 history = collections.deque(maxlen=10)
 dst_min = 2
 dst_max = 60
-max_sec = dst_max/sonic_speed
+max_sec = dst_max/sonic_speed*2
 dst_ratio = [0,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
 
 pi = pigpio.pi()
