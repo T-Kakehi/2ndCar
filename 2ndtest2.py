@@ -24,9 +24,11 @@ T = 0.475 # 車輪幅0.475[m]
 Freq = 100000  # Hzを上げると音が聞きづらくなるが、熱を持つ
 base_duty = 100
 
+sonic_speed = 34300
 history = collections.deque(maxlen=10)
 dst_min = 2
 dst_max = 60
+max_sec = dst_max/sonic_speed
 dst_ratio = [0,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
 
 pi = pigpio.pi()
@@ -86,10 +88,10 @@ class Ultrasonic(threading.Thread):
         StopTime = time.time()
         while pi.read(ECHOpin) == 0:
             StartTime = time.time()
-        while pi.read(ECHOpin) == 1:
+        while pi.read(ECHOpin) == 1 and (time.time() - StartTime) < max_sec:
             StopTime = time.time()
         TimeElapsed = StopTime - StartTime
-        distance = (TimeElapsed * 34300) / 2
+        distance = (TimeElapsed * sonic_speed) / 2
         return distance
 
     def distance_filtered(self):
@@ -239,6 +241,7 @@ if __name__ == '__main__':
                 m.Rpower = status[2]
                 m.Lpower = status[3]
             else:
+
                 status = a.get_Twist()
                 m.speed = status[0]
                 m.ang = status[1]
