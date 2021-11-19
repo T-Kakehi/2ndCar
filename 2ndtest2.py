@@ -27,9 +27,9 @@ base_duty = 100
 sonic_speed = 34300
 history = collections.deque(maxlen=10)
 dst_min = 2
-dst_max = 60
+dst_max = 60.
 max_sec = dst_max/sonic_speed*2
-dst_ratio = [0,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
+dst_ratio = [0,0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
 
 pi = pigpio.pi()
 pi.set_mode(gpio_pinR, pigpio.OUTPUT)
@@ -40,7 +40,7 @@ pi.set_mode(SWpin,pigpio.OUTPUT)
 pi.set_mode(TRIGpin,pigpio.OUTPUT)
 pi.set_mode(ECHOpin,pigpio.INPUT)
 
-print("Pin Setup Completed!")
+print("[INFO]\nPin Setup Completed!")
 
 def terminate():
     try:
@@ -88,10 +88,14 @@ class Ultrasonic(threading.Thread):
         StopTime = time.time()
         while pi.read(ECHOpin) == 0:
             StartTime = time.time()
-        while pi.read(ECHOpin) == 1 and (time.time() - StartTime) <= max_sec:
+        while pi.read(ECHOpin) == 1 and(time.time() - StartTime) < max_sec:
             StopTime = time.time()
         TimeElapsed = StopTime - StartTime
         distance = (TimeElapsed * sonic_speed) / 2
+        if distance < 0:
+            distance = 0
+        # print("---dst---")
+        # print(distance)
         return distance
 
     def distance_filtered(self):
@@ -101,12 +105,9 @@ class Ultrasonic(threading.Thread):
     def run(self):
         while not self.kill:
             dst = self.distance_filtered()
-            if dst_min < dst < dst_max:
-                # print("---dst---")
-                # print(dst)
-                self.dst_level = int(dst/5)
-            elif dst_max < dst:
-                self.dst_level = len(dst_ratio) - 1
+            self.dst_level = int(dst/5)
+            print("---level---")
+            print(dst_ratio[self.dst_level])
             time.sleep(0.2)
 
     def get_level(self):
