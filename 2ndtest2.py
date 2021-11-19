@@ -26,10 +26,14 @@ base_duty = 100
 
 sonic_speed = 34300
 history = collections.deque(maxlen=10)
-dst_min = 2
-dst_max = 60.
+dst_min = 150.
+dst_max = 300.
+dst_gap = 15.
+elem = (dst_max-dst_min)/dst_gap
+print(elem)
+dst_ratio = [i/elem for i in range(int(elem+1))]
 max_sec = dst_max/sonic_speed*2
-dst_ratio = [0,0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
+print("[INFO]dst_elements\n"+str(dst_ratio))
 
 pi = pigpio.pi()
 pi.set_mode(gpio_pinR, pigpio.OUTPUT)
@@ -92,8 +96,8 @@ class Ultrasonic(threading.Thread):
             StopTime = time.time()
         TimeElapsed = StopTime - StartTime
         distance = (TimeElapsed * sonic_speed) / 2
-        if distance < 0:
-            distance = 0
+        if distance < dst_min:
+            distance = dst_min
         # print("---dst---")
         # print(distance)
         return distance
@@ -105,7 +109,7 @@ class Ultrasonic(threading.Thread):
     def run(self):
         while not self.kill:
             dst = self.distance_filtered()
-            self.dst_level = int(dst/5)
+            self.dst_level = int(dst-dst_min/((dst_max-dst_min)/elem))
             print("---level---")
             print(dst_ratio[self.dst_level])
             time.sleep(0.2)
@@ -135,10 +139,9 @@ class Motor(threading.Thread):
             else:
                 #print("Motor On")
                 pi.write(SWpin,1)
-                # print(self.Rpower)
-                # print(self.Lpower)
-                self.Rduty = base_duty*Rmotor_ini*self.Rpower#*dst_ratio[us.get_level()]
-                self.Lduty = base_duty*Lmotor_ini*self.Lpower#*dst_ratio[us.get_level()]
+                print(us.get_level())
+                self.Rduty = base_duty*Rmotor_ini*self.Rpower*dst_ratio[us.get_level()]
+                self.Lduty = base_duty*Lmotor_ini*self.Lpower*dst_ratio[us.get_level()]
                 if self.Rduty > 100:
                     self.Lduty = self.Lduty - (self.Rduty - 100)
                     self.Rduty = 100
