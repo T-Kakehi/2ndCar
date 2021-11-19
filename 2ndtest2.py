@@ -29,9 +29,11 @@ history = collections.deque(maxlen=10)
 dst_min = 150.
 dst_max = 300.
 dst_gap = 15.
+#最大測定距離、最低確保距離、分解能から出力の割合表を作成
 elem = (dst_max-dst_min)/dst_gap
 print(elem)
 dst_ratio = [i/elem for i in range(int(elem+1))]
+#最大測定距離から返ってくる音波の最大時間を計算
 max_sec = dst_max/sonic_speed*2
 print("[INFO]dst_elements\n"+str(dst_ratio))
 
@@ -109,7 +111,10 @@ class Ultrasonic(threading.Thread):
     def run(self):
         while not self.kill:
             dst = self.distance_filtered()
-            self.dst_level = int(dst-dst_min/((dst_max-dst_min)/elem))
+            #最低限の確保距離からどれだけ距離の余裕があるかを分割した単位あたりの距離で割って比率を出す
+            self.dst_level = int((dst-dst_min)/(dst_max-dst_min)*elem)
+            if self.dst_level < 0:
+                self.dst_level = 0
             print("---level---")
             print(dst_ratio[self.dst_level])
             time.sleep(0.2)
