@@ -9,8 +9,8 @@ import pigpio
 from geometry_msgs.msg import TwistStamped
 from sensor_msgs.msg import Joy
 
-gpio_pinR = 13
-gpio_pinL = 12
+gpio_pinR = 12
+gpio_pinL = 13
 DIRpin = 6
 SWpin = 15
 
@@ -26,7 +26,7 @@ base_duty = 100
 
 sonic_speed = 34300
 history = collections.deque(maxlen=10)
-dst_min = 150.
+dst_min = 50.
 dst_max = 250.
 dst_gap = 10.
 #最大測定距離、最低確保距離、分解能から出力の割合表を作成
