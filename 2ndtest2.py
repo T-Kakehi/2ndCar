@@ -8,9 +8,10 @@ import rospy
 import pigpio
 from geometry_msgs.msg import TwistStamped
 from sensor_msgs.msg import Joy
+from std_msgs.msg import Bool
 
-gpio_pinR = 13
-gpio_pinL = 12
+gpio_pinR = 12
+gpio_pinL = 13
 DIRpin = 6
 SWpin = 15
 
@@ -26,9 +27,9 @@ base_duty = 100
 
 sonic_speed = 34300
 history = collections.deque(maxlen=10)
-dst_min = 150.
-dst_max = 300.
-dst_gap = 15.
+dst_min = 50.
+dst_max = 250.
+dst_gap = 10.
 #最大測定距離、最低確保距離、分解能から出力の割合表を作成
 elem = (dst_max-dst_min)/dst_gap
 print(elem)
@@ -112,12 +113,14 @@ class Ultrasonic(threading.Thread):
         while not self.kill:
             dst = self.distance_filtered()
             #最低限の確保距離からどれだけ距離の余裕があるかを分割した単位あたりの距離で割って比率を出す
-            self.dst_level = int((dst-dst_min)/(dst_max-dst_min)*elem)
+            # print("---dst---")
+            # print(dst)
+            self.dst_level = int((dst-dst_min)/(dst_max-dst_min)*len(dst_ratio))
             if self.dst_level < 0:
                 self.dst_level = 0
-            print("---level---")
-            print(dst_ratio[self.dst_level])
-            time.sleep(0.2)
+            # print("---level---")
+            # print(dst_ratio[self.dst_level])
+            time.sleep(0.5)
 
     def get_level(self):
         return self.dst_level
@@ -136,7 +139,6 @@ class Motor(threading.Thread):
 
     def run(self):
         while not self.kill:
-            # print(self.ang)
             # print(self.speed)
             if self.speed <= 0:
                 #print("Motor Stop")
@@ -144,7 +146,7 @@ class Motor(threading.Thread):
             else:
                 #print("Motor On")
                 pi.write(SWpin,1)
-                print(us.get_level())
+                # print(us.get_level())
                 self.Rduty = base_duty*Rmotor_ini*self.Rpower*dst_ratio[us.get_level()]
                 self.Lduty = base_duty*Lmotor_ini*self.Lpower*dst_ratio[us.get_level()]
                 if self.Rduty > 100:
@@ -198,6 +200,7 @@ class Autoware:
 class Joystick:
     def __init__(self):
         self.select_button = 0
+        self.start_button = 0
         self.ciurcle = 0
         self.cross = 0
         self.speed = 0
@@ -208,6 +211,7 @@ class Joystick:
 
     def __callback(self, raw):
         self.select_button = raw.buttons[10]
+        self.start_button = raw.buttons[11]
         self.ciurcle = raw.buttons[3]
         self.cross = raw.buttons[2]
         self.speed = raw.axes[3]
@@ -219,11 +223,29 @@ class Joystick:
         self.Lpower = power[1][0]
 
     def get_button(self):
-        return self.select_button, self.ciurcle, self.cross
+        return self.select_button, self.ciurcle, self.cross, self.start_button
     
     def get_Twist(self):
         return self.speed, self.ang, self.Rpower, self.Lpower
 
+class Detect_White:
+    def __init__(self):
+        self.detect = False
+        self.cnt = 0
+        self.subscriber = rospy.Subscriber('/detect_whiteline', Bool, self.__callback)
+    
+    def __callback(self, raw):
+        self.detect = raw.data
+        if raw.data:
+            self.cnt += 1
+
+    def get_detect(self):
+        return self.detect
+
+    def get_cnt(self):
+        return self.cnt
+
+white = 0
 if __name__ == '__main__':
     print("In The Main Function!")
     us = Ultrasonic()
@@ -234,28 +256,46 @@ if __name__ == '__main__':
     try:
         a = Autoware()
         j = Joystick()
+        dw = Detect_White()
         while not rospy.is_shutdown():
             buttons = j.get_button()
-            if (buttons[0] and buttons[2]):
-                if joy_flag:
-                    print("---Out joy mode---")
-                    joy_flag = False
-            elif (buttons[0] and buttons[1]) or joy_flag:
-                if not joy_flag:
-                    print("---In joy mode---\n[INFO]\nPlease check a centre light red blink")
-                    joy_flag = True
-                status = j.get_Twist()
-                m.speed = status[0]
-                m.ang = status[1]
-                m.Rpower = status[2]
-                m.Lpower = status[3]
+            detect = dw.get_detect()
+            if detect or white:
+                if not white:
+                    print("---In white stop---\n[INFO]This is "+str(dw.get_cnt())+"s whiteline!\nPlease put a start button")
+                white = 1
+                m.speed = 0
+                m.Rpower = 0
+                m.Lpower = 0
+                if buttons[3] == 1:
+                    print("Move forward")
+                    start = time.time()
+                    while (time.time() - start) < 1:
+                        m.speed = 1
+                        m.Rpower = 1
+                        m.Lpower = 1
+                    white = 0
+                    print("---Fin white line---")
             else:
-
-                status = a.get_Twist()
-                m.speed = status[0]
-                m.ang = status[1]
-                m.Rpower = status[2]
-                m.Lpower = status[3]
+                if (buttons[0] and buttons[2]):
+                    if joy_flag:
+                        print("---Out joy mode---")
+                        joy_flag = False
+                elif (buttons[0] and buttons[1]) or joy_flag:
+                    if not joy_flag:
+                        print("---In joy mode---\n[INFO]\nPlease check a centre light red blink")
+                        joy_flag = True
+                    status = j.get_Twist()
+                    m.speed = status[0]
+                    m.ang = status[1]
+                    m.Rpower = status[2]
+                    m.Lpower = status[3]
+                else:
+                    status = a.get_Twist()
+                    m.speed = status[0]
+                    m.ang = status[1]
+                    m.Rpower = status[2]
+                    m.Lpower = status[3]
             rospy.sleep(0.01)
     except (rospy.ROSInterruptException, KeyboardInterrupt):
         pass
