@@ -137,6 +137,18 @@ class Motor(threading.Thread):
         self.Rduty = 0
         self.Lduty = 0
 
+    def set_motor(self, motor):
+        self.speed = motor[0]
+        self.ang = motor[1]
+        self.Rpower = motor[2]
+        self.Lpower = motor[3]
+
+    def stop_motor(self):
+        self.speed = 0
+        self.ang = 0
+        self.Rpower = 0
+        self.Lpower = 0
+
     def run(self):
         while not self.kill:
             # print(self.speed)
@@ -264,16 +276,12 @@ if __name__ == '__main__':
                 if not white:
                     print("---In white stop---\n[INFO]This is "+str(dw.get_cnt())+"s whiteline!\nPlease put a start button")
                 white = 1
-                m.speed = 0
-                m.Rpower = 0
-                m.Lpower = 0
+                m.stop_motor()
                 if buttons[3] == 1:
                     print("Move forward")
                     start = time.time()
                     while (time.time() - start) < 1:
-                        m.speed = 1
-                        m.Rpower = 1
-                        m.Lpower = 1
+                        m.set_motor([1, 0, 1, 1])
                     white = 0
                     print("---Fin white line---")
             else:
@@ -285,11 +293,11 @@ if __name__ == '__main__':
                     if not joy_flag:
                         print("---In joy mode---\n[INFO]\nPlease check a centre light red blink")
                         joy_flag = True
-                    status = j.get_Twist()
-                    m.speed = status[0]
-                    m.ang = status[1]
-                    m.Rpower = status[2]
-                    m.Lpower = status[3]
+                    m.set_motor(j.get_Twist())
+                    # m.speed = status[0]
+                    # m.ang = status[1]
+                    # m.Rpower = status[2]
+                    # m.Lpower = status[3]
                 else:
                     status = a.get_Twist()
                     m.speed = status[0]
