@@ -151,14 +151,12 @@ class Motor(threading.Thread):
 
     def run(self):
         while not self.kill:
-            # print(self.speed)
             if self.speed <= 0:
                 #print("Motor Stop")
                 pi.write(SWpin,0)
             else:
                 #print("Motor On")
                 pi.write(SWpin,1)
-                # print(us.get_level())
                 self.Rduty = base_duty*Rmotor_ini*self.Rpower*dst_ratio[us.get_level()]
                 self.Lduty = base_duty*Lmotor_ini*self.Lpower*dst_ratio[us.get_level()]
                 if self.Rduty > 100:
@@ -173,8 +171,6 @@ class Motor(threading.Thread):
                 elif self.Lduty < 0:
                     self.Rduty = self.Rduty + (abs(self.Lduty))
                     self.Lduty = 0
-                # print(self.Rduty)
-                # print(self.Lduty)
                 pi.hardware_PWM(gpio_pinR, Freq, duty2per(self.Rduty))
                 pi.hardware_PWM(gpio_pinL, Freq, duty2per(self.Lduty))
             time.sleep(0.1)
@@ -192,7 +188,6 @@ class Autoware:
 
     def __callback(self, raw):
         twist = {"speed": raw.twist.linear.x, "ang": raw.twist.angular.z}  # speed: m/s, angular: radian/s
-        # self.twist = {"speed": raw.linear.x, "ang": raw.angular.z}  # speed: m/s, angular: radian/s
         # angular: 右カーブ -> マイナス
         #          左カーブ -> プラス
         rospy.logdebug("Autoware > %s" % self.twist)
@@ -228,9 +223,7 @@ class Joystick:
         self.cross = raw.buttons[2]
         self.speed = raw.axes[3]
         self.ang = raw.axes[2]
-        # print(self.speed, self.ang)
         power = culc_power(self.speed, self.ang)
-        # print(power)
         self.Rpower = power[0][0]
         self.Lpower = power[1][0]
 
