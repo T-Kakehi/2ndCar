@@ -284,7 +284,7 @@ if __name__ == '__main__':
                         joy_flag = False
                 elif (buttons[0] and buttons[1]) or joy_flag:
                     if not joy_flag:
-                        print("---In joy mode---\n[INFO]\nPlease check a centre light red blink")
+                        print("---In joy mode---\n[INFO]\nMake sure it's glowing red.")
                         joy_flag = True
                     m.set_motor(j.get_Twist())
                     # m.speed = status[0]
@@ -303,3 +303,5 @@ if __name__ == '__main__':
     m.kill = True
     us.kill = True
     terminate()
+
+    赤く光っていることを確認してください
