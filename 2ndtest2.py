@@ -137,16 +137,32 @@ class Motor(threading.Thread):
         self.Rduty = 0
         self.Lduty = 0
 
+    def set_motor(self, motor):
+        self.speed = motor[0]
+        self.ang = motor[1]
+        self.Rpower = motor[2]
+        self.Lpower = motor[3]
+
+    def stop_motor(self):
+        self.speed = 0
+        self.ang = 0
+        self.Rpower = 0
+        self.Lpower = 0
+
     def run(self):
         while not self.kill:
-            # print(self.speed)
-            if self.speed <= 0:
+            if -1 < self.speed <= 0:
                 #print("Motor Stop")
                 pi.write(SWpin,0)
+            elif self.speed == -1:
+                pi.write(DIRpin,1)
+                pi.write(SWpin,1)
+                pi.hardware_PWM(gpio_pinR, Freq, duty2per(30))
+                pi.hardware_PWM(gpio_pinL, Freq, duty2per(30))
             else:
                 #print("Motor On")
+                pi.write(DIRpin, 0)
                 pi.write(SWpin,1)
-                # print(us.get_level())
                 self.Rduty = base_duty*Rmotor_ini*self.Rpower*dst_ratio[us.get_level()]
                 self.Lduty = base_duty*Lmotor_ini*self.Lpower*dst_ratio[us.get_level()]
                 if self.Rduty > 100:
@@ -161,8 +177,6 @@ class Motor(threading.Thread):
                 elif self.Lduty < 0:
                     self.Rduty = self.Rduty + (abs(self.Lduty))
                     self.Lduty = 0
-                # print(self.Rduty)
-                # print(self.Lduty)
                 pi.hardware_PWM(gpio_pinR, Freq, duty2per(self.Rduty))
                 pi.hardware_PWM(gpio_pinL, Freq, duty2per(self.Lduty))
             time.sleep(0.1)
@@ -180,7 +194,6 @@ class Autoware:
 
     def __callback(self, raw):
         twist = {"speed": raw.twist.linear.x, "ang": raw.twist.angular.z}  # speed: m/s, angular: radian/s
-        # self.twist = {"speed": raw.linear.x, "ang": raw.angular.z}  # speed: m/s, angular: radian/s
         # angular: 右カーブ -> マイナス
         #          左カーブ -> プラス
         rospy.logdebug("Autoware > %s" % self.twist)
@@ -194,7 +207,7 @@ class Autoware:
         rospy.loginfo("shutdown!")
         self.subscriber.unregister()
 
-    def get_Twist(self):
+    def get_twist(self):
         return self.speed, self.ang, self.Rpower, self.Lpower
 
 class Joystick:
@@ -216,16 +229,14 @@ class Joystick:
         self.cross = raw.buttons[2]
         self.speed = raw.axes[3]
         self.ang = raw.axes[2]
-        # print(self.speed, self.ang)
         power = culc_power(self.speed, self.ang)
-        # print(power)
         self.Rpower = power[0][0]
         self.Lpower = power[1][0]
 
     def get_button(self):
         return self.select_button, self.ciurcle, self.cross, self.start_button
     
-    def get_Twist(self):
+    def get_twist(self):
         return self.speed, self.ang, self.Rpower, self.Lpower
 
 class Detect_White:
@@ -264,16 +275,12 @@ if __name__ == '__main__':
                 if not white:
                     print("---In white stop---\n[INFO]This is "+str(dw.get_cnt())+"s whiteline!\nPlease put a start button")
                 white = 1
-                m.speed = 0
-                m.Rpower = 0
-                m.Lpower = 0
+                m.stop_motor()
                 if buttons[3] == 1:
                     print("Move forward")
                     start = time.time()
                     while (time.time() - start) < 1:
-                        m.speed = 1
-                        m.Rpower = 1
-                        m.Lpower = 1
+                        m.set_motor([1, 0, 1, 1])
                     white = 0
                     print("---Fin white line---")
             else:
@@ -283,19 +290,11 @@ if __name__ == '__main__':
                         joy_flag = False
                 elif (buttons[0] and buttons[1]) or joy_flag:
                     if not joy_flag:
-                        print("---In joy mode---\n[INFO]\nPlease check a centre light red blink")
+                        print("---In joy mode---\n[INFO]\nMake sure it's glowing red.")
                         joy_flag = True
-                    status = j.get_Twist()
-                    m.speed = status[0]
-                    m.ang = status[1]
-                    m.Rpower = status[2]
-                    m.Lpower = status[3]
+                    m.set_motor(j.get_twist())
                 else:
-                    status = a.get_Twist()
-                    m.speed = status[0]
-                    m.ang = status[1]
-                    m.Rpower = status[2]
-                    m.Lpower = status[3]
+                    m.set_motor(a.get_twist())
             rospy.sleep(0.01)
     except (rospy.ROSInterruptException, KeyboardInterrupt):
         pass
