@@ -303,5 +303,3 @@ if __name__ == '__main__':
     m.kill = True
     us.kill = True
     terminate()
-
-    赤く光っていることを確認してください
