@@ -151,11 +151,17 @@ class Motor(threading.Thread):
 
     def run(self):
         while not self.kill:
-            if self.speed <= 0:
+            if -1 < self.speed <= 0:
                 #print("Motor Stop")
                 pi.write(SWpin,0)
+            elif self.speed == -1:
+                pi.write(DIRpin,1)
+                pi.write(SWpin,1)
+                pi.hardware_PWM(gpio_pinR, Freq, duty2per(30))
+                pi.hardware_PWM(gpio_pinL, Freq, duty2per(30))
             else:
                 #print("Motor On")
+                pi.write(DIRpin, 0)
                 pi.write(SWpin,1)
                 self.Rduty = base_duty*Rmotor_ini*self.Rpower*dst_ratio[us.get_level()]
                 self.Lduty = base_duty*Lmotor_ini*self.Lpower*dst_ratio[us.get_level()]
@@ -201,7 +207,7 @@ class Autoware:
         rospy.loginfo("shutdown!")
         self.subscriber.unregister()
 
-    def get_Twist(self):
+    def get_twist(self):
         return self.speed, self.ang, self.Rpower, self.Lpower
 
 class Joystick:
@@ -230,7 +236,7 @@ class Joystick:
     def get_button(self):
         return self.select_button, self.ciurcle, self.cross, self.start_button
     
-    def get_Twist(self):
+    def get_twist(self):
         return self.speed, self.ang, self.Rpower, self.Lpower
 
 class Detect_White:
@@ -286,17 +292,9 @@ if __name__ == '__main__':
                     if not joy_flag:
                         print("---In joy mode---\n[INFO]\nMake sure it's glowing red.")
                         joy_flag = True
-                    m.set_motor(j.get_Twist())
-                    # m.speed = status[0]
-                    # m.ang = status[1]
-                    # m.Rpower = status[2]
-                    # m.Lpower = status[3]
+                    m.set_motor(j.get_twist())
                 else:
-                    status = a.get_Twist()
-                    m.speed = status[0]
-                    m.ang = status[1]
-                    m.Rpower = status[2]
-                    m.Lpower = status[3]
+                    m.set_motor(a.get_twist())
             rospy.sleep(0.01)
     except (rospy.ROSInterruptException, KeyboardInterrupt):
         pass
