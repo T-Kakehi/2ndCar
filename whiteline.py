@@ -33,6 +33,9 @@ morphology_size = (30,30)
 # 検出した直線を長さで絞り込む閾値
 line_size = 15000
 
+x_gap = 10
+y_gap = 1000
+
 cnt = 0
 
 cap = cv2.VideoCapture(CAMERA_PATH)
@@ -119,53 +122,58 @@ def detect():
         thresh = cv2.adaptiveThreshold(gauss, thresh_max, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,adaptive_block_size , distribution)
         # cv2.imshow("thresh", thresh)
 
-        pixel_sum = np.sum(thresh) #全ピクセルの輝度の合計をpixel_sumに代入
-        if pixel_sum > 0:
-            binary_clean = remove_objects(thresh, lower_size, upper_size)
-            # cv2.imshow("img_greenarea_clean", binary_clean)
+        
+        binary_clean = remove_objects(thresh, lower_size, upper_size)
+        # cv2.imshow("img_greenarea_clean", binary_clean)
 
-            kernel = np.ones((morphology_size),np.uint8)
-            connect = cv2.morphologyEx(binary_clean,cv2.MORPH_CLOSE, kernel)
-            cv2.imshow("connect", connect)
+        kernel = np.ones((morphology_size),np.uint8)
+        connect = cv2.morphologyEx(binary_clean,cv2.MORPH_CLOSE, kernel)
+        cv2.imshow("connect", connect)
 
-            lines = lsd(connect)
-            # print(lines)
-            # line1 = resize_img.copy()
-            line2 = resize_img.copy()
-            count = 0
-            x_ave = 0
-            y_ave = 0
-            for line in lines:
-                x1, y1, x2, y2 = map(int,line[:4])
-                # line1 = cv2.line(line1, (x1,y1), (x2,y2), (0,0,255), 3)
-                if (x2-x1)**2 + (y2-y1)**2 > line_size:
-                    if count > 0:
-                        x_ave += (x2-x1)**2 - buf_x
-                        y_ave += (y2-y1)**2 - buf_y
-                    else:
-                        x_ave = 0
-                        y_ave = 0
-                    buf_x = (x2-x1)**2
-                    buf_y = (y2-y1)**2
-                    count += 1
-                    # 赤線を引く
-                    line2 = cv2.line(line2, (x1,y1), (x2,y2), (0,0,255), 3)
-            if x_ave > 0 and y_ave > 0:
-                x_ave = np.sqrt(x_ave/count)
-                y_ave = np.sqrt(y_ave/count)
-                if x_ave * y_ave < 1000 and y_ave < 10:
-                    if cnt == 0:
-                        start = time.time()
-                        # print(start)
-                        cnt = 1
-            if (time.time() - start) > 1 and cnt == 1:
+        lines = lsd(connect)
+        # print(lines)
+        # line1 = resize_img.copy()
+        line2 = resize_img.copy()
+        count = 0
+        x_ave = 0
+        y_ave = 0
+        for line in lines:
+            x1, y1, x2, y2 = map(int,line[:4])
+            # line1 = cv2.line(line1, (x1,y1), (x2,y2), (0,0,255), 3)
+            if (x2-x1)**2 + (y2-y1)**2 > line_size:
+                if count > 0:
+                    x_ave += (x2-x1)**2 - buf_x
+                    y_ave += (y2-y1)**2 - buf_y
+                else:
+                    x_ave = 0
+                    y_ave = 0
+                buf_x = (x2-x1)**2
+                buf_y = (y2-y1)**2
+                count += 1
+                # 赤線を引く
+                line2 = cv2.line(line2, (x1,y1), (x2,y2), (0,0,255), 3)
+        # time_temp = time.time()
+        if x_ave > 0 and y_ave > 0:
+            x_ave = np.sqrt(x_ave/count)
+            y_ave = np.sqrt(y_ave/count)
+            if x_ave * y_ave < y_gap and y_ave < x_gap:
                 pub.publish(True)
-                print("This is white line")
-                cnt = 0
-            else:
-                pub.publish(False)
-            cv2.imshow("line", line2)
-            
+        #         if cnt == 0:
+        #             start = time_temp
+        #             # print(start)
+        #             cnt = 1
+        # if (time_temp - start) > 1.5 and cnt == 2:
+        #     print("Complete check whiteline") 
+        #     cnt = 0
+        # elif (time_temp - start) > 0.3 and cnt == 1:
+        #     pub.publish(True)
+        #     print("This is white line")
+        #     cnt = 2
+
+        else:
+            pub.publish(False)
+        cv2.imshow("line", line2)
+        
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
